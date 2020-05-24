@@ -1111,6 +1111,98 @@ Function Get-Adcomputers {
 	$script:ComputersEnabledTable.Add($computersdisabled)
 	New-WriteTime 300
 }
+
+#       vmware info
+$VCenterServer = $NULL
+if ($VCenterServer -eq $NULL)
+    {  $VCenterServer = Read-Host -Prompt 'No hard-coded vCenter server name in script, prompting interactively for vCenter Server Name' }
+Connect-ViServer $VCenterServer
+$MasterVMList = Get-VM
+$AllVirtualMachines = $MasterVMList | select Name,Guest,NumCPU,MemoryGB,ProvisionedSpaceGB,VMHost
+$AllVirtualMachines | %  {  
+	$obj = [PSCustomObject]@{
+		'Name'	      = $_.Name
+		'Guest' = $_.Guest
+		'NumCPU' = $_.NumCPU
+	     'MemoryGB'	      = $_.MemoryGB
+		'ProvisionedSpaceGB' = $_.ProvisionedSpaceGB
+		'VMHost' = $_.VMHost	
+	}
+$VmwareVmList.Add($obj)}
+$OutofDate = $MasterVMList | where {$_.PowerState -ne "PoweredOff" -and $_.ExtensionData.Guest.ToolsStatus -ne "toolsOk"}
+$ResultantSet = @($OutofDate | select Name,Guest,@{Name="ToolsVersion";Expression={$_.ExtensionData.Guest.Toolsversion}})
+ $ResultantSet | %  {  
+	$obj = [PSCustomObject]@{
+		'Name'	      = $_.Name
+		'Guest' = $_.Guest
+		'ToolsVersion' = $_.ToolsVersion
+	}
+$OutdatedVMwareTools.Add($obj);
+}
+If (($OutdatedVMwareTools).count -eq 0) {
+	$OutdatedVMwareTools = [PSCustomObject]@{
+		'Information' = 'All virtual machines have up-to-date VMWare Tools installations'
+	}
+}
+$Snapshots = $MasterVMList | Get-Snapshot | select Guest,NumCPU,MemoryGB,ProvisionedSpaceGB
+ $Snapshots | %  {  
+	$obj = [PSCustomObject]@{
+		'Guest'	      = $_.Guest
+		'NumcPU' = $_.NumcPU
+		'MemoryGB' = $_.MemoryGB
+	    'ProvisionedSpaceGB'= $_.ProvisionedSpaceGB
+	}
+$OpenSnapshotTable.Add($obj);
+}
+If (($OpenSnapshotTable).count -eq 0) {
+	$OpenSnapshotTable = [PSCustomObject]@{
+		'Information' = 'There are no open VMWare Snapshots'
+	}
+}
+$AllDatastores = Get-Datastore | select Name, FreeSpaceGB, CapacityGB
+ $AllDatastores | %  {  
+	$obj = [PSCustomObject]@{
+		'Name'	      = $_.Name
+		'FreeSpaceGB' = $_.FreeSpaceGB
+		'CapacityGB' = $_.CapacityGB
+	}
+$DatastoreTable.Add($obj);
+}
+If (($DatastoreTable).count -eq 0) {
+	$DatastoreTable = [PSCustomObject]@{
+		'Information' = 'No datastores were found in the virtual infrastructure'
+	}
+}
+$AllPortGroups = Get-VirtualPortGroup | select Name, VLanID, VirtualSwitch
+ $AllPortGroups | %  {  
+	$obj = [PSCustomObject]@{
+		'Name'	      = $_.Name
+		'VLanID' = $_.VLanID
+		'VirtualSwitch' = $_.VirtualSwitch
+	}
+$PortGroupTable.Add($obj);
+}
+If (($PortGroupTable).count -eq 0) {
+	$PortGroupTable = [PSCustomObject]@{
+		'Information' = 'No port groups were found in the virtual infrastructure'
+	}
+}
+$AllVcenterAlarms = Get-VIEvent | select Username, FullFormattedMessage, CreatedTime
+ $AllVcenterAlarms | %  {  
+	$obj = [PSCustomObject]@{
+		'Username'	      = $_.Username
+		'FullFormattedMessage' = $_.FullFormattedMessage
+		'CreatedTime' = $_.CreatedTime
+	}
+$VcenterAlarmTable.Add($obj);
+}
+If (($VcenterAlarmTable).count -eq 0) {
+	$VcenterAlarmTable = [PSCustomObject]@{
+		'Information' = 'No recent vCenter alarms found.'
+	}
+}
+
+
 # Checking for Empty Tables
 Function compare-tables {
 	Write-ProgressHelper 24 "compare-tables"
@@ -1699,7 +1791,55 @@ Function Get-Report {
 
 	$FinalReport.Add($(Get-HTMLTabContentClose))
 	$FinalReport.Add($(Get-HTMLClosePage))
+		#################
+#endregion
+$FinalReport += get-htmltabcontentopen -TabName $tabarray[6] -TabHeading ("Report: " + (Get-Date -Format MM-dd-yyyy))
 
+$FinalReport += Get-HtmlContentOpen -HeaderText "Virtual Machines"
+$FinalReport += get-htmlColumn1of2
+$FinalReport += Get-HtmlContentOpen -BackgroundShade 1 -HeaderText 'All Virtual Machines'
+$FinalReport += get-htmlcontentdatatable $VmwareVmList -HideFooter
+$FinalReport += Get-HtmlContentClose
+$FinalReport += get-htmlColumnClose
+
+$FinalReport += get-htmlColumn2of2
+$FinalReport += Get-HtmlContentOpen -HeaderText 'Outdated VMWare Tools'
+$FinalReport += get-htmlcontentdatatable $OutdatedVMwareTools -HideFooter
+$FinalReport += Get-HtmlContentClose
+$FinalReport += Get-HtmlContentOpen -HeaderText 'Open VMWare Snapshots'
+$FinalReport += get-htmlcontentdatatable $OpenSnapshotTable -HideFooter
+$FinalReport += Get-HtmlContentClose
+$FinalReport += Get-HtmlContentOpen -HeaderText 'ESXi Hosts'
+$FinalReport += get-htmlcontentdatatable $EsxiHostTable -HideFooter
+$FinalReport += Get-HtmlContentClose
+$FinalReport += get-htmlColumnClose
+
+$FinalReport += Get-HTMLContentOpen -HeaderText "Networking and Storage"
+   
+$FinalReport += Get-HTMLColumnOpen -ColumnNumber 1 -ColumnCount 2
+$FinalReport += Get-HtmlContentOpen -HeaderText 'Port Groups and VLANs'
+$FinalReport += get-htmlcontentdatatable $PortGroupTable -HideFooter
+$FinalReport += Get-HtmlContentClose
+$FinalReport += get-htmlColumnClose
+
+
+$FinalReport += Get-HTMLColumnOpen -ColumnNumber 2 -ColumnCount 2
+$FinalReport += Get-HtmlContentOpen -HeaderText 'Datastores'
+$FinalReport += get-htmlcontentdatatable $DatastoreTable -HideFooter
+$FinalReport += Get-HtmlContentClose
+$FinalReport += Get-HtmlContentClose
+$FinalReport += get-htmlColumnClose
+
+$FinalReport += Get-HtmlContentClose
+
+$FinalReport += Get-HTMLContentOpen -HeaderText "vCenter Alarms"
+$FinalReport += Get-HtmlContentOpen -HeaderText 'Recent VCenter Alarms'
+$FinalReport += get-htmlcontentdatatable $VcenterAlarmTable -HideFooter
+$FinalReport += Get-HtmlContentClose
+$FinalReport += Get-HtmlContentClose
+
+$FinalReport += get-htmltabcontentclose
+#############################
 	$Day = (Get-Date).Day
 	$Month = (Get-Date).Month
 	$Year = (Get-Date).Year
