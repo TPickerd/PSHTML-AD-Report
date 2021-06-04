@@ -545,18 +545,25 @@ Function Get-ExpiredAccounts {
 }
 # Security Logs
 Function Get-Seclogs {
+	<# 
+		Get-eventlog has been superceded by Get-WinEvent. Updated so we have a valid command on a Windows 10 workstation.
+		Requires elevated privileges else Get-Winevent errors out.
+		This can be improved upon - currently queries the local machine. If these logs are desirable, it would 
+		be benefitial to query all domain controllers' security logs and group per-DC.
+		
+		Also, the search filter can be improved on to find more specific events. Bradley's original seem to have sought EntryType == "SuccessAudit" events.
+	#>
 	Write-ProgressHelper 17 "Get-Seclogs"
 	New-LogWrite "[$loggingDate]  Function Get-Seclogs "
-	# Security Logs
-	$SecurityLogs = Get-EventLog -Newest 7 -LogName 'Security' | Where-Object { $_.Message -like '*An account*' }
+	$SecurityLogs = Get-WinEvent -LogName 'Security' | Where-Object { $_.Message -like '*An account*' } | Select-Object -First 5
 	If ($SecurityLogs) {
 		foreach ($SecurityLog in $SecurityLogs) {
-			$TimeGenerated = $SecurityLog.TimeGenerated
-			$EntryType = $SecurityLog.EntryType
+			$TimeGenerated = $SecurityLog.TimeCreated
+			#$EntryType = $SecurityLog.KeywordsDisplayNames
 			$Recipient = $SecurityLog.Message
 			$securitylogss = [PSCustomObject]@{
 				'Time'    = $TimeGenerated
-				'Type'    = $EntryType
+			#	'Type'    = $EntryType  # Displays incorrectly currently.
 				'Message' = $Recipient
 			}
 			$script:SecurityEventTable.Add($securitylogss)
