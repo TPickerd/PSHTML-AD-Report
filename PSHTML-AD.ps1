@@ -585,6 +585,24 @@ Function Get-Seclogs {
     $script:SecurityEventTable = $script:SecurityEventTable | Sort-Object Time -Descending 
 	New-WriteTime 300
 }
+# Domains
+Function Get-Domains {
+	Write-ProgressHelper 18 "Get-Domains"
+	New-LogWrite "[$loggingDate]  Function Get-Domains "
+	# Tenant Domain
+	$Domains = Get-ADForest | Select-Object -ExpandProperty upnsuffixes
+	If ($Domains) {
+		ForEach ($Domain  in $Domains) {
+			$domainforest = [PSCustomObject]@{
+				'UPN Suffixes' = $Domain
+				'True'    = $true  
+			}
+			$script:DomainTable.Add($domainforest)
+			New-LogWrite "[$loggingDate]  `DomainTable $DomainTable"
+		}
+	}
+	New-WriteTime 300
+}
 # Buld Group tables
 Function Get-Groups {
 	Write-ProgressHelper 19 "Get-Groups"
