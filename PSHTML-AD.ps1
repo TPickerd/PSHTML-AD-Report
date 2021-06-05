@@ -551,11 +551,18 @@ Function Get-Seclogs {
 		This can be improved upon - currently queries the local machine. If these logs are desirable, it would 
 		be benefitial to query all domain controllers' security logs and group per-DC.
 		
-		Also, the search filter can be improved on to find more specific events. Bradley's original seem to have sought EntryType == "SuccessAudit" events.
+		Bradley's original seem to have sought EntryType == "SuccessAudit" events?
+
+		Keywords:
+		SuccessAudit = -9214364837600034816
+		FailureAudit = -9218868437227405312
+
+		An Account was successfully logged on (event ID 4624)
+
 	#>
 	Write-ProgressHelper 17 "Get-Seclogs"
 	New-LogWrite "[$loggingDate]  Function Get-Seclogs "
-	$SecurityLogs = Get-WinEvent -LogName 'Security' | Where-Object { $_.Message -like '*An account*' } | Select-Object -First 5
+	$SecurityLogs = Get-WinEvent -LogName 'Security' | where-object {$_.Keywords -eq "-9214364837600034816"} | Select-Object -First 25
 	If ($SecurityLogs) {
 		foreach ($SecurityLog in $SecurityLogs) {
 			$TimeGenerated = $SecurityLog.TimeCreated
