@@ -546,54 +546,43 @@ Function Get-ExpiredAccounts {
 # Security Logs
 Function Get-Seclogs {
 	<# 
-		Get-eventlog has been superceded by Get-WinEvent. Updated so we have a valid command on a Windows 10 workstation.
-		Requires elevated privileges else Get-Winevent errors out.
-		This can be improved upon - currently queries the local machine. If these logs are desirable, it would 
-		be benefitial to query all domain controllers' security logs and group per-DC.
-		
-		Bradley's original seem to have sought EntryType == "SuccessAudit" events?
+		! Get-eventlog has been superceded by Get-WinEvent. Updated so we have a valid command on newer workstations/servers.
+		! Updated to query all domain controllers in forest.
+		! Bradley's original seem to have sought EntryType == "SuccessAudit" events? 
 
 		Keywords:
 		SuccessAudit = -9214364837600034816
 		FailureAudit = -9218868437227405312
 
+		Event IDs:
 		An Account was successfully logged on (event ID 4624)
 
 	#>
 	Write-ProgressHelper 17 "Get-Seclogs"
 	New-LogWrite "[$loggingDate]  Function Get-Seclogs "
-	$SecurityLogs = Get-WinEvent -LogName 'Security' | where-object {$_.Keywords -eq "-9214364837600034816"} | Select-Object -First 25
-	If ($SecurityLogs) {
-		foreach ($SecurityLog in $SecurityLogs) {
-			$TimeGenerated = $SecurityLog.TimeCreated
-			#$EntryType = $SecurityLog.KeywordsDisplayNames
-			$Recipient = $SecurityLog.Message
-			$securitylogss = [PSCustomObject]@{
-				'Time'    = $TimeGenerated
-			#	'Type'    = $EntryType  # Displays incorrectly currently.
-				'Message' = $Recipient
-			}
-			$script:SecurityEventTable.Add($securitylogss)
-		}
-	}
-	New-WriteTime 300
-}
-# Domains
-Function Get-Domains {
-	Write-ProgressHelper 18 "Get-Domains"
-	New-LogWrite "[$loggingDate]  Function Get-Domains "
-	# Tenant Domain
-	$Domains = Get-ADForest | Select-Object -ExpandProperty upnsuffixes
-	If ($Domains) {
-		ForEach ($Domain  in $Domains) {
-			$domainforest = [PSCustomObject]@{
-				'UPN Suffixes' = $Domain
-				'True'    = $true  
-			}
-			$script:DomainTable.Add($domainforest)
-			New-LogWrite "[$loggingDate]  `DomainTable $DomainTable"
-		}
-	}
+
+    $DomainControllers = Get-addomaincontroller -filter * -server (Get-ADDomain).DNSRoot | Select-Object Hostname,Name
+
+    Foreach ($DomainController in $DomainControllers) {
+        #$DC = $DomainController.Name
+    	$SecurityLogs = Get-WinEvent -LogName 'Security' -ComputerName $DomainController.Hostname | where-object {$_.Id -eq "4624"} | Select-Object -First 25
+
+        If ($SecurityLogs) {
+            foreach ($SecurityLog in $SecurityLogs) {
+                $TimeGenerated = $SecurityLog.TimeCreated
+                $Recipient = $SecurityLog.Message
+                $securitylogss = [PSCustomObject]@{                    
+                    'Time'    = $TimeGenerated
+                    'DC' = $DomainController.Name
+                    'Message' = $Recipient
+                }
+                $script:SecurityEventTable.Add($securitylogss)
+            }
+        Start-Sleep -Milliseconds 300
+        }
+    }
+
+    $script:SecurityEventTable = $script:SecurityEventTable | Sort-Object Time -Descending 
 	New-WriteTime 300
 }
 # Buld Group tables
